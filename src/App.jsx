@@ -116,26 +116,34 @@ export default function App() {
     openForm(type, editId = null) { setForm({ type, editId }) },
     closeForm() { setForm(null) },
 
-    async saveGoal({ editId, name, why, due, icon, stageNames }) {
+    async saveGoal({ editId, name, why, due, icon, stages }) {
       const dueLabel = formatDue(due)
+      const clean = stages
+        .map(s => ({ id: s.id, name: (s.name || '').trim(), due: (s.due || '').trim() || 'без срока' }))
+        .filter(s => s.name)
       if (editId) {
         const g = goals.find(x => x.id === editId)
         try {
           await api.updateGoal(editId, { name, icon, why, due, dueLabel })
-          // reconcile stages by position
+          // delete stages the user removed
+          const keptIds = new Set(clean.filter(s => s.id).map(s => s.id))
+          const removed = g.stages.filter(s => !keptIds.has(s.id))
+          if (removed.length) await api.deleteStages(removed.map(s => s.id))
+          // update existing (by id) / insert new — preserve order
           const newStages = []
-          for (let i = 0; i < stageNames.length; i++) {
-            const cur = g.stages[i]
+          for (let i = 0; i < clean.length; i++) {
+            const s = clean[i]
+            const cur = s.id ? g.stages.find(x => x.id === s.id) : null
             if (cur) {
-              if (cur.name !== stageNames[i]) await api.updateStage(cur.id, { name: stageNames[i] })
-              newStages.push({ ...cur, name: stageNames[i] })
+              if (cur.name !== s.name || cur.due !== s.due || g.stages.indexOf(cur) !== i) {
+                await api.updateStage(cur.id, { name: s.name, due: s.due, position: i })
+              }
+              newStages.push({ ...cur, name: s.name, due: s.due })
             } else {
-              const row = await api.insertStage(editId, stageNames[i], 'без срока', i)
+              const row = await api.insertStage(editId, s.name, s.due, i)
               newStages.push({ id: row.id, name: row.name, due: row.due, steps: [] })
             }
           }
-          const removed = g.stages.slice(stageNames.length)
-          if (removed.length) await api.deleteStages(removed.map(s => s.id))
           updGoalLocal(editId, gg => {
             gg.name = name; gg.icon = icon; gg.why = why; gg.due = due; gg.dueLabel = dueLabel
             gg.stages = newStages
@@ -144,15 +152,15 @@ export default function App() {
         } catch (e) { console.error(e) }
       } else {
         const note = 'Двигайся маленькими шагами — главное не скорость, а постоянство.'
-        const names = stageNames.length ? stageNames : ['Первый этап']
+        const list = clean.length ? clean : [{ name: 'Первый этап', due: 'без срока' }]
         try {
           const goalRow = await api.insertGoal({ name, icon, why, due, dueLabel, note }, goals.length)
-          const stages = []
-          for (let i = 0; i < names.length; i++) {
-            const row = await api.insertStage(goalRow.id, names[i], 'без срока', i)
-            stages.push({ id: row.id, name: row.name, due: row.due, steps: [] })
+          const built = []
+          for (let i = 0; i < list.length; i++) {
+            const row = await api.insertStage(goalRow.id, list[i].name, list[i].due, i)
+            built.push({ id: row.id, name: row.name, due: row.due, steps: [] })
           }
-          const ng = { id: goalRow.id, name, why, due, dueLabel, icon, note, stages, habits: [] }
+          const ng = { id: goalRow.id, name, why, due, dueLabel, icon, note, stages: built, habits: [] }
           setGoals(gs => [...gs, ng])
           setSelectedGoal(ng.id); setRouteState('goalDetail'); scrollTop()
         } catch (e) { console.error(e) }
@@ -160,12 +168,40 @@ export default function App() {
       setForm(null)
     },
 
-    async saveHabit({ editId, name, icon, freqType, freq, time, goals: gl }) {
+    async deleteGoal(id) {
+      try { await api.deleteGoal(id) } catch (e) { console.error(e) }
+      setGoals(gs => gs.filter(g => g.id !== id))
+      // drop the link from any habit referencing it
+      setHabits(hs => hs.map(h => (h.goals.includes(id) ? { ...h, goals: h.goals.filter(x => x !== id) } : h)))
+      setForm(null)
+      setSelectedGoal(null)
+      setRoute('goals')
+    },
+
+    renameStep(gid, sid, tid, name) {
+      updGoalLocal(gid, gg => {
+        gg.stages = gg.stages.map(s => (s.id !== sid ? s
+          : { ...s, steps: s.steps.map(x => (x.id === tid ? { ...x, name } : x)) }))
+        return gg
+      })
+      api.renameStep(tid, name).then(r => { if (r?.error) console.error(r.error) }).catch(console.error)
+    },
+
+    removeStep(gid, sid, tid) {
+      updGoalLocal(gid, gg => {
+        gg.stages = gg.stages.map(s => (s.id !== sid ? s
+          : { ...s, steps: s.steps.filter(x => x.id !== tid) }))
+        return gg
+      })
+      api.deleteStep(tid).then(r => { if (r?.error) console.error(r.error) }).catch(console.error)
+    },
+
+    async saveHabit({ editId, name, icon, freqType, freq, time, kind, goals: gl }) {
       if (editId) {
         try {
-          await api.updateHabit(editId, { name, icon, freq, freqType, time })
+          await api.updateHabit(editId, { name, icon, freq, freqType, time, kind })
           await api.setHabitGoals(editId, gl)
-          setHabits(hs => hs.map(h => (h.id === editId ? { ...h, name, icon, freq, freqType, time, goals: gl } : h)))
+          setHabits(hs => hs.map(h => (h.id === editId ? { ...h, name, icon, freq, freqType, time, kind, goals: gl } : h)))
           // keep goal.habits in sync
           setGoals(gs => gs.map(g => ({
             ...g,
@@ -176,16 +212,23 @@ export default function App() {
         } catch (e) { console.error(e) }
       } else {
         try {
-          const row = await api.insertHabit({ name, icon, freq, freqType, time }, habits.length)
+          const row = await api.insertHabit({ name, icon, freq, freqType, time, kind }, habits.length)
           await api.setHabitGoals(row.id, gl)
           const nh = recomputeHabit({
-            id: row.id, name, icon, color: 'habit', freq, freqType, time, goals: gl,
+            id: row.id, name, icon, color: 'habit', freq, freqType, time, kind, goals: gl,
           }, new Set())
           setHabits(hs => [...hs, nh])
           setGoals(gs => gs.map(g => (gl.includes(g.id)
             ? { ...g, habits: Array.from(new Set([...g.habits, row.id])) } : g)))
         } catch (e) { console.error(e) }
       }
+      setForm(null)
+    },
+
+    async deleteHabit(id) {
+      try { await api.deleteHabit(id) } catch (e) { console.error(e) }
+      setHabits(hs => hs.filter(h => h.id !== id))
+      setGoals(gs => gs.map(g => (g.habits.includes(id) ? { ...g, habits: g.habits.filter(x => x !== id) } : g)))
       setForm(null)
     },
 

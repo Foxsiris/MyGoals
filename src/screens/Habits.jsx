@@ -3,6 +3,7 @@
    ============================================================ */
 import { Icon } from '../components/Icon'
 import { Check, Heatmap, HabitBadge } from '../components/ui'
+import { isMissed } from '../lib/metrics'
 
 export function Habits({ store }) {
   const { habits, goals, toggleHabit, openForm } = store
@@ -35,15 +36,19 @@ export function Habits({ store }) {
 
 function HabitCard({ h, goals, onToggle, onOpenGoal, onEdit }) {
   const linked = goals.filter(g => h.goals.includes(g.id))
+  const quit = h.kind === 'quit'
+  const missed = isMissed(h)
   return (
     <div className="card habit-card" style={{ padding: 'var(--pad)' }}>
       <div className="habit-row">
-        <Check on={h.doneToday} color="habit" size="lg" onClick={onToggle} />
+        <Check on={h.doneToday} color="habit" size="lg" miss={missed} onClick={onToggle} />
         <HabitBadge icon={h.icon} size={46} />
         <div className="habit-meta">
           <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
             <h3 style={{ fontSize: 18 }}>{h.name}</h3>
-            <span className="chip" style={{ padding: '3px 10px', fontSize: 12 }}>{h.time ? h.time + ' · ' : ''}{h.freq}</span>
+            <span className={`chip ${missed ? 'miss' : ''}`} style={{ padding: '3px 10px', fontSize: 12 }}>{h.time ? h.time + ' · ' : ''}{h.freq}</span>
+            {quit && <span className="chip quit" style={{ padding: '3px 10px', fontSize: 12 }}><Icon name="arrowDownCircle" size={12} /> Отказ</span>}
+            {missed && <span className="chip miss" style={{ padding: '3px 10px', fontSize: 12 }}><Icon name="alert" size={12} /> пропущено</span>}
             <button className="btn ghost sm" style={{ padding: 6, marginLeft: 'auto' }} onClick={onEdit} aria-label="Изменить привычку">
               <Icon name="edit" size={16} />
             </button>
@@ -61,7 +66,7 @@ function HabitCard({ h, goals, onToggle, onOpenGoal, onEdit }) {
           )}
         </div>
         <div className="habit-metrics">
-          <Metric value={h.streak} label="серия" icon="flame" />
+          <Metric value={h.streak} label={quit ? 'дней без срыва' : 'серия'} icon="flame" />
           <Metric value={h.best} label="рекорд" />
           <Metric value={h.rate + '%'} label="за период" />
         </div>

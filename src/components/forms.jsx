@@ -23,16 +23,24 @@ function GoalForm({ store, editId }) {
   const [why, setWhy] = useState(existing?.why || '')
   const [due, setDue] = useState(existing?.due || '')
   const [icon, setIcon] = useState(existing?.icon || 'sparkle')
-  const [stages, setStages] = useState(existing ? existing.stages.map(s => s.name) : ['', ''])
+  const [stages, setStages] = useState(existing
+    ? existing.stages.map(s => ({ id: s.id, name: s.name, due: s.due === 'без срока' ? '' : s.due }))
+    : [{ name: '', due: '' }, { name: '', due: '' }])
   const [err, setErr] = useState(false)
 
-  const setStage = (i, v) => setStages(s => s.map((x, j) => (j === i ? v : x)))
-  const addStage = () => setStages(s => [...s, ''])
+  const setStage = (i, field, v) => setStages(s => s.map((x, j) => (j === i ? { ...x, [field]: v } : x)))
+  const addStage = () => setStages(s => [...s, { name: '', due: '' }])
   const rmStage = (i) => setStages(s => s.filter((_, j) => j !== i))
+
+  const inp = { flex: 1, padding: '10px 13px', border: '1.5px solid var(--border)', borderRadius: 'var(--r-sm)', background: 'var(--surface-2)', fontSize: 14, outline: 'none', width: '100%' }
 
   const save = () => {
     if (!name.trim()) { setErr(true); return }
-    store.saveGoal({ editId, name: name.trim(), why: why.trim(), due, icon, stageNames: stages.map(s => s.trim()).filter(Boolean) })
+    store.saveGoal({ editId, name: name.trim(), why: why.trim(), due, icon, stages })
+  }
+
+  const del = () => {
+    if (window.confirm('Удалить цель со всеми этапами и шагами? Это действие необратимо.')) store.deleteGoal(editId)
   }
 
   return (
@@ -82,15 +90,17 @@ function GoalForm({ store, editId }) {
         </div>
 
         <div className="field">
-          <label>Этапы <span className="muted" style={{ fontWeight: 500 }}>— разбей путь на крупные блоки. Шаги добавишь на дорожной карте.</span></label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+          <label>Этапы <span className="muted" style={{ fontWeight: 500 }}>— разбей путь на крупные блоки и задай срок. Шаги добавишь на дорожной карте.</span></label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {stages.map((s, i) => (
-              <div key={i} className="row" style={{ gap: 10 }}>
-                <div className="stage-num" style={{ background: 'var(--goal-tint)', color: 'var(--goal-ink)' }}>{i + 1}</div>
-                <input type="text" value={s} placeholder={`Этап ${i + 1}`} onChange={e => setStage(i, e.target.value)}
-                  style={{ flex: 1, padding: '10px 13px', border: '1.5px solid var(--border)', borderRadius: 'var(--r-sm)', background: 'var(--surface-2)', fontSize: 14, outline: 'none' }} />
+              <div key={s.id || i} className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
+                <div className="stage-num" style={{ background: 'var(--goal-tint)', color: 'var(--goal-ink)', marginTop: 4 }}>{i + 1}</div>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <input type="text" value={s.name} placeholder={`Этап ${i + 1}`} onChange={e => setStage(i, 'name', e.target.value)} style={inp} />
+                  <input type="text" value={s.due} placeholder="срок — напр. «до июля» (необязательно)" onChange={e => setStage(i, 'due', e.target.value)} style={{ ...inp, fontSize: 13, padding: '8px 13px' }} />
+                </div>
                 {stages.length > 1 && (
-                  <button className="btn ghost sm" style={{ padding: 8 }} onClick={() => rmStage(i)}><Icon name="x" size={16} /></button>
+                  <button className="btn ghost sm" style={{ padding: 8, marginTop: 2 }} onClick={() => rmStage(i)}><Icon name="x" size={16} /></button>
                 )}
               </div>
             ))}
@@ -98,9 +108,14 @@ function GoalForm({ store, editId }) {
           </div>
         </div>
 
-        <div className="row" style={{ justifyContent: 'flex-end', gap: 10, marginTop: 4 }}>
-          <button className="btn ghost" onClick={store.closeForm}>Отмена</button>
-          <button className="btn primary" onClick={save}>{editId ? 'Сохранить' : 'Создать цель'}</button>
+        <div className="row" style={{ justifyContent: 'space-between', gap: 10, marginTop: 4 }}>
+          {editId
+            ? <button className="btn ghost danger" onClick={del}><Icon name="trash" size={16} /> Удалить</button>
+            : <span />}
+          <div className="row" style={{ gap: 10 }}>
+            <button className="btn ghost" onClick={store.closeForm}>Отмена</button>
+            <button className="btn primary" onClick={save}>{editId ? 'Сохранить' : 'Создать цель'}</button>
+          </div>
         </div>
       </div>
     </Modal>
@@ -111,12 +126,14 @@ function GoalForm({ store, editId }) {
 function HabitForm({ store, editId }) {
   const existing = editId ? store.habits.find(h => h.id === editId) : null
   const [name, setName] = useState(existing?.name || '')
+  const [kind, setKind] = useState(existing?.kind || 'build')
   const [icon, setIcon] = useState(existing?.icon || 'leaf')
   const [freq, setFreq] = useState(existing?.freqType || 'daily')
   const [time, setTime] = useState(existing?.time || '')
   const [goalLinks, setGoalLinks] = useState(existing?.goals || [])
   const [err, setErr] = useState(false)
 
+  const quit = kind === 'quit'
   const freqs = [
     { k: 'daily', label: 'Ежедневно' },
     { k: 'weekdays', label: 'По будням' },
@@ -126,8 +143,12 @@ function HabitForm({ store, editId }) {
 
   const save = () => {
     if (!name.trim()) { setErr(true); return }
-    store.saveHabit({ editId, name: name.trim(), icon, freqType: freq,
+    store.saveHabit({ editId, name: name.trim(), icon, kind, freqType: freq,
       freq: freqs.find(f => f.k === freq).label, time: time || null, goals: goalLinks })
+  }
+
+  const del = () => {
+    if (window.confirm('Удалить привычку со всей историей? Это действие необратимо.')) store.deleteHabit(editId)
   }
 
   return (
@@ -145,8 +166,20 @@ function HabitForm({ store, editId }) {
       </div>
       <div className="sheet-body">
         <div className="field">
+          <label>Тип</label>
+          <div className="seg">
+            <button className={!quit ? 'on' : ''} onClick={() => setKind('build')}>Привычка</button>
+            <button className={quit ? 'on' : ''} onClick={() => setKind('quit')}>Отказ</button>
+          </div>
+          <div className="hint">{quit
+            ? 'Отказ от вредного: считаем дни без срыва («не курю N дней»). Отмечай каждый день, когда удержался.'
+            : 'Полезное действие, которое хочешь повторять и наращивать серию.'}</div>
+        </div>
+
+        <div className="field">
           <label>Название</label>
-          <input type="text" value={name} autoFocus placeholder="Например: медитация 10 минут"
+          <input type="text" value={name} autoFocus
+            placeholder={quit ? 'Например: курение, сладкое, соцсети' : 'Например: медитация 10 минут'}
             onChange={e => { setName(e.target.value); setErr(false) }}
             style={err ? { borderColor: 'var(--habit)' } : {}} />
           {err && <div className="hint" style={{ color: 'var(--habit-ink)' }}>Дай привычке название</div>}
@@ -197,9 +230,14 @@ function HabitForm({ store, editId }) {
           </div>
         </div>
 
-        <div className="row" style={{ justifyContent: 'flex-end', gap: 10, marginTop: 4 }}>
-          <button className="btn ghost" onClick={store.closeForm}>Отмена</button>
-          <button className="btn habit" onClick={save}>{editId ? 'Сохранить' : 'Создать привычку'}</button>
+        <div className="row" style={{ justifyContent: 'space-between', gap: 10, marginTop: 4 }}>
+          {editId
+            ? <button className="btn ghost danger" onClick={del}><Icon name="trash" size={16} /> Удалить</button>
+            : <span />}
+          <div className="row" style={{ gap: 10 }}>
+            <button className="btn ghost" onClick={store.closeForm}>Отмена</button>
+            <button className="btn habit" onClick={save}>{editId ? 'Сохранить' : (quit ? 'Создать отказ' : 'Создать привычку')}</button>
+          </div>
         </div>
       </div>
     </Modal>

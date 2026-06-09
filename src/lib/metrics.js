@@ -73,6 +73,20 @@ export function calcRate(heat) {
   return Math.round((heat.filter(l => l > 0).length / heat.length) * 100)
 }
 
+// "missed" = a positive habit not done today and already overdue (past its
+// reminder time, or no reminder set). Quit habits are never "missed" — an
+// unmarked day there just means the clean streak hasn't been extended yet.
+export function isMissed(h) {
+  if (h.kind === 'quit') return false
+  if (h.doneToday) return false
+  if (h.time && /^\d{1,2}:\d{2}$/.test(h.time)) {
+    const [hh, mm] = h.time.split(':').map(Number)
+    const now = new Date()
+    return now.getHours() * 60 + now.getMinutes() >= hh * 60 + mm
+  }
+  return true
+}
+
 /* ---------------- goal / stage progress ---------------- */
 
 export function stageProgress(stage) {

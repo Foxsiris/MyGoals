@@ -5,10 +5,10 @@ import { useEffect } from 'react'
 import { Icon } from './Icon'
 
 // ---- Animated check button ----
-export function Check({ on, onClick, color = 'habit', size = 'md' }) {
+export function Check({ on, onClick, color = 'habit', size = 'md', miss = false }) {
   return (
     <button
-      className={`check ${color === 'goal' ? 'goal' : ''} ${on ? 'on' : ''} ${size === 'lg' ? 'lg' : ''}`}
+      className={`check ${color === 'goal' ? 'goal' : ''} ${on ? 'on' : ''} ${size === 'lg' ? 'lg' : ''} ${!on && miss ? 'miss' : ''}`}
       onClick={onClick} aria-pressed={on}>
       <Icon name="check" size={size === 'lg' ? 17 : 15} stroke={3} />
     </button>

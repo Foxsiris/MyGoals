@@ -113,6 +113,38 @@ export function GoalDetail({ store }) {
   )
 }
 
+function StepRow({ goal, stage, step, store }) {
+  const [editing, setEditing] = useState(false)
+  const [text, setText] = useState(step.name)
+  const ref = useRef(null)
+  useEffect(() => { if (editing && ref.current) { ref.current.focus(); ref.current.select() } }, [editing])
+
+  const commit = () => {
+    const v = text.trim()
+    if (v && v !== step.name) store.renameStep(goal.id, stage.id, step.id, v)
+    else setText(step.name)
+    setEditing(false)
+  }
+
+  return (
+    <div className={`step ${step.done ? 'done' : ''}`}>
+      <Check on={step.done} color="goal" onClick={() => store.toggleStep(goal.id, stage.id, step.id)} />
+      <div className="step-body">
+        {editing ? (
+          <input ref={ref} className="step-rename" value={text}
+            onChange={e => setText(e.target.value)} onBlur={commit}
+            onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setText(step.name); setEditing(false) } }} />
+        ) : (
+          <div className="step-title editable" onClick={() => { setText(step.name); setEditing(true) }} title="Нажми, чтобы изменить">{step.name}</div>
+        )}
+      </div>
+      <button className="step-del" onClick={() => store.removeStep(goal.id, stage.id, step.id)} aria-label="Удалить шаг">
+        <Icon name="x" size={14} />
+      </button>
+    </div>
+  )
+}
+
 function StageColumn({ goal, stage, index, store }) {
   const sp = stageProgress(stage)
   const done = sp.pct === 100
@@ -144,12 +176,7 @@ function StageColumn({ goal, stage, index, store }) {
       </div>
       <div className="stage-steps">
         {stage.steps.map(s => (
-          <div key={s.id} className={`step ${s.done ? 'done' : ''}`}>
-            <Check on={s.done} color="goal" onClick={() => store.toggleStep(goal.id, stage.id, s.id)} />
-            <div className="step-body">
-              <div className="step-title">{s.name}</div>
-            </div>
-          </div>
+          <StepRow key={s.id} goal={goal} stage={stage} step={s} store={store} />
         ))}
 
         {adding ? (

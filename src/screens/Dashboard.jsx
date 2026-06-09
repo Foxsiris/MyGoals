@@ -3,7 +3,7 @@
    ============================================================ */
 import { Icon } from '../components/Icon'
 import { Check, Ring, HabitBadge, Streak, SectionHead } from '../components/ui'
-import { goalProgress, nextSteps, currentStage, MONTHS, WEEKDAYS } from '../lib/metrics'
+import { goalProgress, nextSteps, currentStage, isMissed, MONTHS, WEEKDAYS } from '../lib/metrics'
 
 export function Dashboard({ store }) {
   const { goals, habits, toggleHabit, toggleStep, openGoal } = store
@@ -47,18 +47,26 @@ export function Dashboard({ store }) {
           <SectionHead icon="habit" color="habit" title="Привычки на сегодня"
             right={<span className="muted" style={{ fontWeight: 700, fontSize: 13 }}>{doneCount}/{habits.length}</span>} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 14 }}>
-            {habits.map(h => (
-              <div key={h.id} className="row" style={{ gap: 13, padding: '9px 4px' }}>
-                <Check on={h.doneToday} color="habit" onClick={() => toggleHabit(h.id)} />
-                <HabitBadge icon={h.icon} size={34} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14.5, color: h.doneToday ? 'var(--faint)' : 'var(--ink)',
-                    textDecorationLine: h.doneToday ? 'line-through' : 'none', textDecorationColor: 'var(--habit-soft)' }}>{h.name}</div>
-                  <div className="tag-freq">{h.time ? h.time + ' · ' : ''}{h.freq}</div>
+            {habits.map(h => {
+              const missed = isMissed(h)
+              const quit = h.kind === 'quit'
+              return (
+                <div key={h.id} className="row" style={{ gap: 13, padding: '9px 4px' }}>
+                  <Check on={h.doneToday} color="habit" miss={missed} onClick={() => toggleHabit(h.id)} />
+                  <HabitBadge icon={h.icon} size={34} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14.5, color: h.doneToday ? 'var(--faint)' : 'var(--ink)',
+                      textDecorationLine: h.doneToday ? 'line-through' : 'none', textDecorationColor: 'var(--habit-soft)' }}>{h.name}</div>
+                    <div className="tag-freq" style={missed ? { color: 'var(--miss-ink)', fontWeight: 700 } : {}}>
+                      {missed ? 'пропущено · ' : ''}{h.time ? h.time + ' · ' : ''}{h.freq}
+                    </div>
+                  </div>
+                  {quit
+                    ? <span className="chip quit" style={{ fontSize: 12, whiteSpace: 'nowrap' }}><Icon name="flame" size={12} /> {h.streak} дн.</span>
+                    : <Streak n={h.streak} color="habit" />}
                 </div>
-                <Streak n={h.streak} color="habit" />
-              </div>
-            ))}
+              )
+            })}
             {habits.length === 0 && <div className="empty">Пока нет привычек. Добавь первую!</div>}
           </div>
         </section>

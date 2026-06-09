@@ -30,6 +30,12 @@
   --habit-tint:   oklch(0.965 0.02 162);
   --habit-ink:    oklch(0.45 0.1 162);
 
+  /* MISS — habit skipped / overdue (red) */
+  --miss:      oklch(0.62 0.19 25);
+  --miss-soft: oklch(0.91 0.06 25);
+  --miss-tint: oklch(0.965 0.03 25);
+  --miss-ink:  oklch(0.52 0.18 25);
+
   /* radii — soft, friendly */
   --r-sm: 10px;
   --r:    16px;
@@ -277,6 +283,29 @@ input, textarea, select { font-family: inherit; }
 .chip .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .chip.goal { background: var(--goal-tint); border-color: var(--goal-soft); color: var(--goal-ink); }
 .chip.habit { background: var(--habit-tint); border-color: var(--habit-soft); color: var(--habit-ink); }
+.chip.miss { background: var(--miss-tint); border-color: var(--miss-soft); color: var(--miss-ink); }
+.chip.quit { background: var(--miss-tint); border-color: var(--miss-soft); color: var(--miss-ink); }
+
+/* danger button (delete) */
+.btn.danger { color: var(--miss-ink); }
+.btn.danger:hover { background: var(--miss-tint); border-color: var(--miss-soft); }
+
+/* delete-step button inside a roadmap step */
+.step .step-del {
+  flex: none; width: 24px; height: 24px; border-radius: 7px; border: none;
+  background: transparent; color: var(--faint);
+  display: grid; place-items: center; opacity: 0;
+  transition: opacity 0.14s, background 0.14s, color 0.14s;
+}
+.step:hover .step-del { opacity: 1; }
+.step .step-del:hover { background: var(--miss-tint); color: var(--miss); }
+.app.mobile .step .step-del { opacity: 1; }
+.step-title.editable { cursor: text; }
+.step-rename {
+  width: 100%; border: none; outline: none; background: transparent;
+  font-size: 14px; font-weight: 600; line-height: 1.35; color: var(--ink);
+  border-bottom: 1.5px solid var(--goal); padding-bottom: 1px;
+}
 
 .tag-freq {
   font-size: 11.5px; font-weight: 600; color: var(--muted);
@@ -312,6 +341,8 @@ input, textarea, select { font-family: inherit; }
   animation: ring-burst 0.5s var(--ease-out);
 }
 .check.goal { --c: var(--goal); }
+.check.miss { border-color: var(--miss); background: var(--miss-tint); }
+.check.miss:hover { border-color: var(--miss); }
 @keyframes ring-burst {
   0% { opacity: 0.55; transform: scale(0.6); }
   100% { opacity: 0; transform: scale(1.25); }

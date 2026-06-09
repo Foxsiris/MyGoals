@@ -64,7 +64,7 @@ export async function loadAll() {
     const heat = buildHeat(doneSet)
     return {
       id: h.id, name: h.name, icon: h.icon, color: h.color || 'habit',
-      freq: h.freq, freqType: h.freq_type, time: h.time,
+      freq: h.freq, freqType: h.freq_type, time: h.time, kind: h.kind || 'build',
       goals: goalsByHabit[h.id] || [],
       doneSet, heat,
       doneToday: doneSet.has(today),
@@ -95,7 +95,8 @@ export async function setHabitToday(habitId, on) {
 export async function insertHabit(fields, position) {
   const { data, error } = await supabase.from('habits').insert({
     name: fields.name, icon: fields.icon, color: 'habit',
-    freq: fields.freq, freq_type: fields.freqType, time: fields.time, position,
+    freq: fields.freq, freq_type: fields.freqType, time: fields.time,
+    kind: fields.kind || 'build', position,
   }).select().single()
   if (error) throw error
   return data
@@ -105,7 +106,12 @@ export async function updateHabit(id, fields) {
   return supabase.from('habits').update({
     name: fields.name, icon: fields.icon,
     freq: fields.freq, freq_type: fields.freqType, time: fields.time,
+    kind: fields.kind || 'build',
   }).eq('id', id)
+}
+
+export async function deleteHabit(id) {
+  return supabase.from('habits').delete().eq('id', id)
 }
 
 export async function setHabitGoals(habitId, goalIds) {
@@ -126,6 +132,14 @@ export async function insertStep(stageId, name, position) {
     .insert({ stage_id: stageId, name, done: false, position }).select().single()
   if (error) throw error
   return data
+}
+
+export async function renameStep(id, name) {
+  return supabase.from('steps').update({ name }).eq('id', id)
+}
+
+export async function deleteStep(id) {
+  return supabase.from('steps').delete().eq('id', id)
 }
 
 export async function insertStage(goalId, name, due, position) {
@@ -159,6 +173,10 @@ export async function updateGoal(id, fields) {
     name: fields.name, icon: fields.icon, why: fields.why,
     due: fields.due || null, due_label: fields.dueLabel,
   }).eq('id', id)
+}
+
+export async function deleteGoal(id) {
+  return supabase.from('goals').delete().eq('id', id)
 }
 
 /* ---------------- matrix ---------------- */
