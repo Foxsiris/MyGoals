@@ -3,7 +3,10 @@
    ============================================================ */
 import { Icon } from '../components/Icon'
 import { Bar, HabitBadge } from '../components/ui'
-import { totalCompletions, weekdayBreakdown, weeklyTrend, WINDOW_DAYS } from '../lib/metrics'
+import {
+  totalCompletions, weekdayBreakdown, weeklyTrend, productiveDays,
+  bestDays, streakUnit, plural,
+} from '../lib/metrics'
 
 export function Stats({ store }) {
   const { habits } = store
@@ -24,23 +27,14 @@ export function Stats({ store }) {
 
   const total = totalCompletions(habits)
   const avgRate = Math.round(habits.reduce((a, h) => a + h.rate, 0) / habits.length)
-  const bestStreak = Math.max(...habits.map(h => h.best))
-  const curBest = habits.reduce((a, h) => (h.streak > a.streak ? h : a), habits[0])
+  // the actual record holder — value and name belong to the same habit
+  const recordHolder = habits.reduce((a, h) => (bestDays(h) > bestDays(a) ? h : a), habits[0])
   const trend = weeklyTrend(habits, 12)
   const wd = weekdayBreakdown(habits)
   const ranked = [...habits].sort((a, b) => b.rate - a.rate)
   const top = ranked[0], weak = ranked[ranked.length - 1]
   const trendDelta = trend[trend.length - 1] - trend[trend.length - 2]
-
-  // productive days = days where a majority of habits were completed
-  const days = WINDOW_DAYS
-  const need = Math.ceil(habits.length / 2)
-  let productive = 0
-  for (let i = 0; i < days; i++) {
-    let c = 0
-    habits.forEach(h => { const arr = h.heat.slice(-days); if (arr[i] > 0) c++ })
-    if (c >= need) productive++
-  }
+  const productive = productiveDays(habits)
 
   return (
     <div className="fade-in">
@@ -54,10 +48,13 @@ export function Stats({ store }) {
 
       {/* KPI row */}
       <div className="stat-kpis">
-        <Kpi icon="check" value={total} label="всего выполнений" sub="за 17 недель" />
-        <Kpi icon="calendar" value={productive} label="продуктивных дней" sub="бо́льшая часть привычек" />
+        <Kpi icon="check" value={total} label={plural(total, ['выполнение', 'выполнения', 'выполнений'])} sub="за 17 недель" />
+        <Kpi icon="calendar" value={productive}
+          label={plural(productive, ['продуктивный день', 'продуктивных дня', 'продуктивных дней'])}
+          sub="бо́льшая часть привычек" />
         <Kpi icon="trend" value={avgRate + '%'} label="средний процент" sub="по всем привычкам" />
-        <Kpi icon="flame" value={bestStreak} label="рекорд серии" sub={`сейчас: ${curBest.name}`} accent />
+        <Kpi icon="flame" value={`${recordHolder.best} ${streakUnit(recordHolder)}`}
+          label="рекорд серии" sub={`«${recordHolder.name}»`} accent />
       </div>
 
       <div className="stat-cols">
@@ -202,7 +199,7 @@ function HighlightCard({ kind, h }) {
         </div>
         <div style={{ fontWeight: 700, fontSize: 16.5, marginTop: 3 }}>{h.name}</div>
         <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>
-          {h.rate}% выполнения · серия {h.streak} {best ? '· так держать' : '· подтяни на этой неделе'}
+          {h.rate}% выполнения · серия {h.streak} {streakUnit(h)} {best ? '· так держать' : '· подтяни на этой неделе'}
         </div>
       </div>
       <div className="stat-num" style={{ fontSize: 30, color: best ? 'var(--habit-ink)' : 'var(--goal)' }}>{h.rate}%</div>

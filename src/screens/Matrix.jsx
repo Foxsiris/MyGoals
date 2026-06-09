@@ -52,7 +52,10 @@ export function Matrix({ store }) {
                   className={`quad ${overQ === q.id ? 'over' : ''}`}
                   style={{ '--qa': st.accent, '--qt': st.tint, '--qs': st.soft }}
                   onDragOver={(e) => { e.preventDefault(); if (overQ !== q.id) setOverQ(q.id) }}
-                  onDragLeave={(e) => { if (e.currentTarget === e.target) setOverQ(null) }}
+                  onDragLeave={(e) => {
+                    // ignore leave events caused by entering a child card
+                    if (!e.currentTarget.contains(e.relatedTarget)) setOverQ(null)
+                  }}
                   onDrop={() => onDrop(q.id)}>
                   <div className="quad-head">
                     <div className="quad-badge" style={{ background: st.tint, color: st.ink }}>
@@ -146,7 +149,7 @@ function TaskCard({ t, dragging, onDragStart, onDragEnd, onRemove, onRename, onM
           </span>
         )}
       </div>
-      <button className="task-del" onClick={onRemove} aria-label="Удалить"><Icon name="x" size={15} /></button>
+      <button className="task-del" onClick={onRemove} aria-label="Удалить задачу"><Icon name="x" size={15} /></button>
     </div>
   )
 }

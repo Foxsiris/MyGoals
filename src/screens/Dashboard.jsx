@@ -3,15 +3,18 @@
    ============================================================ */
 import { Icon } from '../components/Icon'
 import { Check, Ring, HabitBadge, Streak, SectionHead } from '../components/ui'
-import { goalProgress, nextSteps, currentStage, isMissed, MONTHS, WEEKDAYS } from '../lib/metrics'
+import {
+  goalProgress, nextSteps, currentStage, isMissed, dueToday, offTodayLabel,
+  streakUnit, streakDays, MONTHS, WEEKDAYS,
+} from '../lib/metrics'
 
 export function Dashboard({ store }) {
   const { goals, habits, toggleHabit, toggleStep, openGoal } = store
 
-  const doneCount = habits.filter(h => h.doneToday).length
+  const dueHabits = habits.filter(dueToday)
+  const doneCount = dueHabits.filter(h => h.doneToday).length
   const weekRate = habits.length ? Math.round(habits.reduce((a, h) => a + h.rate, 0) / habits.length) : 0
-  const bestStreak = habits.length ? Math.max(...habits.map(h => h.streak)) : 0
-  const bestStreakHabit = habits.reduce((a, h) => (h.streak > (a?.streak ?? -1) ? h : a), null)
+  const bestCur = habits.reduce((a, h) => (streakDays(h) > (a ? streakDays(a) : -1) ? h : a), null)
   const steps = nextSteps(goals, 5)
   const goalsPct = goals.length ? Math.round(goals.reduce((a, g) => a + goalProgress(g).pct, 0) / goals.length) : 0
 
@@ -20,6 +23,11 @@ export function Dashboard({ store }) {
   const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1)
   const hour = today.getHours()
   const greet = hour < 5 ? 'Доброй ночи' : hour < 12 ? 'Доброе утро' : hour < 18 ? 'Добрый день' : 'Добрый вечер'
+  const subMsg = habits.length === 0
+    ? 'Начни с первой привычки — маленькие шаги сегодня дают большой результат потом.'
+    : dueHabits.length === 0
+      ? 'На сегодня всё по плану — можно отдохнуть.'
+      : `${doneCount} из ${dueHabits.length} на сегодня уже отмечено. Маленькие шаги сегодня — большой результат потом.`
 
   return (
     <div className="fade-in">
@@ -27,17 +35,18 @@ export function Dashboard({ store }) {
         <div>
           <div className="eyebrow">{cap(dateStr)}</div>
           <h1>{greet}, Даниил</h1>
-          <p className="sub">{doneCount} из {habits.length} привычек уже отмечено. Маленькие шаги сегодня — большой результат потом.</p>
+          <p className="sub">{subMsg}</p>
         </div>
       </div>
 
       {/* momentum tiles */}
       <div className="tiles">
-        <StatTile color="habit" icon="flame" big={bestStreak} unit="дней" label="Лучшая серия"
-          sub={bestStreakHabit ? bestStreakHabit.name : '—'} />
+        <StatTile color="habit" icon="flame" big={bestCur ? bestCur.streak : 0}
+          unit={bestCur ? streakUnit(bestCur) : 'дн.'} label="Текущая серия"
+          sub={bestCur ? bestCur.name : '—'} />
         <StatTile color="goal" icon="goal" ringPct={goalsPct}
           label="Прогресс по целям" sub={`${goals.length} активные цели`} />
-        <StatTile color="habit" icon="sparkle" big={weekRate} unit="%" label="За период"
+        <StatTile color="habit" icon="sparkle" big={weekRate} unit="%" label="За 17 недель"
           sub="по всем привычкам" />
       </div>
 
@@ -45,25 +54,29 @@ export function Dashboard({ store }) {
         {/* Today's habits */}
         <section className="card" style={{ padding: 'var(--pad)' }}>
           <SectionHead icon="habit" color="habit" title="Привычки на сегодня"
-            right={<span className="muted" style={{ fontWeight: 700, fontSize: 13 }}>{doneCount}/{habits.length}</span>} />
+            right={<span className="muted" style={{ fontWeight: 700, fontSize: 13 }}>{doneCount}/{dueHabits.length}</span>} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 14 }}>
             {habits.map(h => {
               const missed = isMissed(h)
               const quit = h.kind === 'quit'
+              const off = offTodayLabel(h)
+              const weekly = h.freqType === 'weekly3'
               return (
-                <div key={h.id} className="row" style={{ gap: 13, padding: '9px 4px' }}>
-                  <Check on={h.doneToday} color="habit" miss={missed} onClick={() => toggleHabit(h.id)} />
+                <div key={h.id} className="row" style={{ gap: 13, padding: '9px 4px', opacity: off ? 0.62 : 1 }}>
+                  <Check on={h.doneToday} color="habit" miss={missed} onClick={() => toggleHabit(h.id)}
+                    label={`Отметить «${h.name}»`} />
                   <HabitBadge icon={h.icon} size={34} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: 14.5, color: h.doneToday ? 'var(--faint)' : 'var(--ink)',
                       textDecorationLine: h.doneToday ? 'line-through' : 'none', textDecorationColor: 'var(--habit-soft)' }}>{h.name}</div>
                     <div className="tag-freq" style={missed ? { color: 'var(--miss-ink)', fontWeight: 700 } : {}}>
-                      {missed ? 'пропущено · ' : ''}{h.time ? h.time + ' · ' : ''}{h.freq}
+                      {missed ? 'пропущено · ' : ''}{off ? off + ' · ' : ''}{h.time ? h.time + ' · ' : ''}{h.freq}
+                      {weekly ? ` · ${h.weekDone}/3 на неделе` : ''}
                     </div>
                   </div>
                   {quit
                     ? <span className="chip quit" style={{ fontSize: 12, whiteSpace: 'nowrap' }}><Icon name="flame" size={12} /> {h.streak} дн.</span>
-                    : <Streak n={h.streak} color="habit" />}
+                    : <Streak n={weekly ? `${h.streak} нед.` : h.streak} color="habit" />}
                 </div>
               )
             })}

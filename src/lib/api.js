@@ -3,24 +3,19 @@
    granular CRUD wrappers used by the store.
    ============================================================ */
 import { supabase } from './supabase'
-import {
-  buildHeat, calcStreak, calcBest, calcRate, todayStr, formatDue, fmtDate,
-} from './metrics'
+import { deriveHabit, todayStr, formatDue } from './metrics'
 
 /* ---------------- load + transform ---------------- */
 
 export async function loadAll() {
-  // habit logs: a generous window so streak/best/heatmap are accurate
-  const since = new Date(); since.setDate(since.getDate() - 200)
-  const sinceStr = fmtDate(since)
-
   const [goalsR, stagesR, stepsR, habitsR, linksR, logsR, matrixR] = await Promise.all([
     supabase.from('goals').select('*').order('position'),
     supabase.from('stages').select('*').order('position'),
     supabase.from('steps').select('*').order('position'),
     supabase.from('habits').select('*').order('position'),
     supabase.from('habit_goals').select('*'),
-    supabase.from('habit_logs').select('habit_id, log_date, done').gte('log_date', sinceStr),
+    // full history: «рекорд» must really be the all-time best
+    supabase.from('habit_logs').select('habit_id, log_date, done'),
     supabase.from('matrix_tasks').select('*').order('position'),
   ])
 
@@ -50,6 +45,7 @@ export async function loadAll() {
   const goals = goalsRows.map(g => ({
     id: g.id, name: g.name, icon: g.icon, why: g.why,
     due: g.due, dueLabel: g.due_label || formatDue(g.due), note: g.note,
+    createdAt: g.created_at ? g.created_at.slice(0, 10) : null,
     stages: stagesByGoal[g.id] || [],
     habits: habitsByGoal[g.id] || [],
   }))
@@ -58,19 +54,12 @@ export async function loadAll() {
   const doneByHabit = {}
   logs.forEach(l => { if (l.done) (doneByHabit[l.habit_id] ??= new Set()).add(l.log_date) })
 
-  const today = todayStr()
-  const habits = habitsRows.map(h => {
-    const doneSet = doneByHabit[h.id] || new Set()
-    const heat = buildHeat(doneSet)
-    return {
-      id: h.id, name: h.name, icon: h.icon, color: h.color || 'habit',
-      freq: h.freq, freqType: h.freq_type, time: h.time, kind: h.kind || 'build',
-      goals: goalsByHabit[h.id] || [],
-      doneSet, heat,
-      doneToday: doneSet.has(today),
-      streak: calcStreak(doneSet), best: calcBest(doneSet), rate: calcRate(heat),
-    }
-  })
+  const habits = habitsRows.map(h => deriveHabit({
+    id: h.id, name: h.name, icon: h.icon, color: h.color || 'habit',
+    freq: h.freq, freqType: h.freq_type, time: h.time, kind: h.kind || 'build',
+    createdAt: h.created_at ? h.created_at.slice(0, 10) : null,
+    goals: goalsByHabit[h.id] || [],
+  }, doneByHabit[h.id] || new Set()))
 
   const matrixTasks = matrixRows.map(t => ({
     id: t.id, name: t.name, tag: t.tag, accent: t.accent, quadrant: t.quadrant,
@@ -81,8 +70,7 @@ export async function loadAll() {
 
 /* ---------------- habits ---------------- */
 
-export async function setHabitToday(habitId, on) {
-  const date = todayStr()
+export async function setHabitDay(habitId, date, on) {
   if (on) {
     return supabase.from('habit_logs').upsert(
       { habit_id: habitId, log_date: date, done: true },
@@ -90,6 +78,10 @@ export async function setHabitToday(habitId, on) {
     )
   }
   return supabase.from('habit_logs').delete().match({ habit_id: habitId, log_date: date })
+}
+
+export async function setHabitToday(habitId, on) {
+  return setHabitDay(habitId, todayStr(), on)
 }
 
 export async function insertHabit(fields, position) {

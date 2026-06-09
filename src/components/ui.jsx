@@ -3,13 +3,14 @@
    ============================================================ */
 import { useEffect } from 'react'
 import { Icon } from './Icon'
+import { MONTHS, mondayIndex, fmtDate } from '../lib/metrics'
 
 // ---- Animated check button ----
-export function Check({ on, onClick, color = 'habit', size = 'md', miss = false }) {
+export function Check({ on, onClick, color = 'habit', size = 'md', miss = false, label = 'Отметить выполнение' }) {
   return (
     <button
       className={`check ${color === 'goal' ? 'goal' : ''} ${on ? 'on' : ''} ${size === 'lg' ? 'lg' : ''} ${!on && miss ? 'miss' : ''}`}
-      onClick={onClick} aria-pressed={on}>
+      onClick={onClick} aria-pressed={on} aria-label={label}>
       <Icon name="check" size={size === 'lg' ? 17 : 15} stroke={3} />
     </button>
   )
@@ -48,14 +49,37 @@ export function Bar({ pct, color = 'goal' }) {
 }
 
 // ---- Heatmap ----
-export function Heatmap({ data, weeks = 17 }) {
-  const cells = data.slice(-(weeks * 7))
+// Columns are real calendar weeks (Mon–Sun): the data ends today, the
+// rest of the current week renders as transparent "future" cells, and
+// a few leading days are trimmed so the first column starts on Monday.
+// Pass onToggleDay to make past days editable (forgot to mark yesterday).
+export function Heatmap({ data, weeks = 17, freqType = 'daily', createdAt = null, onToggleDay }) {
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const future = 6 - mondayIndex(today)
+  let cells = data.slice(-(weeks * 7))
+  cells = cells.slice((cells.length + future) % 7)
+  const n = cells.length
+  const created = createdAt ? new Date(createdAt + 'T00:00:00') : null
   return (
-    <div className="heat">
-      {cells.map((lvl, i) => (
-        <div key={i} className={`cell ${lvl ? 'l' + lvl : ''}`}
-          title={lvl ? 'Выполнено' : 'Пропущено'} />
-      ))}
+    <div className={`heat ${onToggleDay ? 'editable' : ''}`}>
+      {cells.map((lvl, i) => {
+        const d = new Date(today); d.setDate(today.getDate() - (n - 1 - i))
+        const pre = created && d < created
+        const weekend = mondayIndex(d) > 4
+        const off = !lvl && !pre && freqType === 'weekdays' && weekend
+        const status = lvl ? 'выполнено'
+          : pre ? 'до создания привычки'
+          : off ? 'не по графику'
+          : freqType === 'weekly3' ? 'не отмечено' : 'пропуск'
+        const hint = onToggleDay ? ' · нажми, чтобы изменить' : ''
+        return (
+          <div key={i}
+            className={`cell ${lvl ? 'l4' : ''} ${pre || off ? 'off' : ''} ${i === n - 1 ? 'today' : ''}`}
+            onClick={onToggleDay ? () => onToggleDay(fmtDate(d)) : undefined}
+            title={`${d.getDate()} ${MONTHS[d.getMonth()]} — ${status}${hint}`} />
+        )
+      })}
+      {Array.from({ length: future }, (_, i) => <div key={`f${i}`} className="cell future" />)}
     </div>
   )
 }
@@ -89,11 +113,19 @@ export function Modal({ children, onClose }) {
   useEffect(() => {
     const h = (e) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', h)
-    return () => window.removeEventListener('keydown', h)
+    // lock the page behind the sheet and put focus back where it was
+    const opener = document.activeElement
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', h)
+      document.body.style.overflow = prevOverflow
+      if (opener && typeof opener.focus === 'function') opener.focus()
+    }
   }, [onClose])
   return (
     <div className="overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="sheet">{children}</div>
+      <div className="sheet" role="dialog" aria-modal="true">{children}</div>
     </div>
   )
 }

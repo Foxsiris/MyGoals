@@ -4,15 +4,30 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { Icon } from '../components/Icon'
 import { Check, Ring, Bar, Streak } from '../components/ui'
-import { goalProgress, stageProgress, currentStage } from '../lib/metrics'
+import { goalProgress, stageProgress, currentStage, isOverdue, streakUnit, goalForecast, plural } from '../lib/metrics'
 
 export function GoalDetail({ store }) {
   const { goals, habits, selectedGoal, toggleHabit, setRoute, openForm } = store
   const g = goals.find(x => x.id === selectedGoal)
-  if (!g) return null
+  if (!g) {
+    return (
+      <div className="fade-in">
+        <div className="card empty" style={{ padding: 48 }}>
+          Цель не найдена — возможно, она была удалена.
+          <div style={{ marginTop: 18 }}>
+            <button className="btn" onClick={() => setRoute('goals')}>
+              <Icon name="chevronL" size={16} /> К списку целей
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
   const p = goalProgress(g)
   const cur = currentStage(g)
   const linked = habits.filter(h => g.habits.includes(h.id))
+  const overdue = isOverdue(g, p.pct)
+  const fc = goalForecast(g)
 
   return (
     <div className="fade-in">
@@ -42,9 +57,21 @@ export function GoalDetail({ store }) {
                 <span style={{ color: 'var(--goal)', fontWeight: 700 }}>Зачем: </span>{g.why}</p>
             )}
             <div className="row" style={{ gap: 18, marginTop: 18, flexWrap: 'wrap' }}>
-              <span className="chip"><Icon name="calendar" size={14} /> {g.dueLabel}</span>
+              <span className={`chip ${overdue ? 'miss' : ''}`}>
+                <Icon name={overdue ? 'alert' : 'calendar'} size={14} /> {g.dueLabel}{overdue ? ' · просрочено' : ''}
+              </span>
               {cur && <span className="chip"><Icon name="target" size={14} /> Этап {g.stages.indexOf(cur) + 1} из {p.stagesTotal}</span>}
               <span className="chip"><Icon name="check" size={14} /> {p.done} из {p.total} шагов</span>
+              {fc && fc.eta && (
+                <span className={`chip ${fc.onTrack === false ? 'miss' : 'goal'}`}>
+                  <Icon name="trend" size={14} /> при таком темпе — к {fc.etaLabel}{fc.onTrack === false ? ' · позже срока' : fc.onTrack ? ' · успеваешь' : ''}
+                </span>
+              )}
+              {fc && !fc.eta && fc.needPerWeek != null && (
+                <span className="chip goal">
+                  <Icon name="trend" size={14} /> нужно ≈{fc.needPerWeek} {plural(fc.needPerWeek, ['шаг', 'шага', 'шагов'])} в неделю
+                </span>
+              )}
             </div>
           </div>
           <button className="btn sm gd-edit" onClick={() => openForm('goal', g.id)}><Icon name="edit" size={15} /> Изменить</button>
@@ -60,11 +87,11 @@ export function GoalDetail({ store }) {
             <div className="linked-grid" style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(linked.length, 3)}, 1fr)`, gap: 12 }}>
               {linked.map(h => (
                 <div key={h.id} className="row" style={{ gap: 12, padding: '12px 14px', borderRadius: 'var(--r)', background: 'var(--habit-tint)', border: '1px solid var(--habit-soft)' }}>
-                  <Check on={h.doneToday} color="habit" onClick={() => toggleHabit(h.id)} />
+                  <Check on={h.doneToday} color="habit" onClick={() => toggleHabit(h.id)} label={`Отметить «${h.name}»`} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: 14 }}>{h.name}</div>
                     <div className="row" style={{ gap: 8, marginTop: 3 }}>
-                      <Streak n={h.streak} color="habit" />
+                      <Streak n={`${h.streak} ${streakUnit(h)}`} color="habit" />
                       <span className="muted" style={{ fontSize: 11.5 }}>· {h.rate}% за период</span>
                     </div>
                   </div>

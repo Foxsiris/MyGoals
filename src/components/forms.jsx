@@ -53,7 +53,7 @@ function GoalForm({ store, editId }) {
             </div>
             <h2 style={{ fontSize: 21 }}>{editId ? 'Изменить цель' : 'Новая цель'}</h2>
           </div>
-          <button className="btn ghost sm" onClick={store.closeForm}><Icon name="x" size={18} /></button>
+          <button className="btn ghost sm" onClick={store.closeForm} aria-label="Закрыть"><Icon name="x" size={18} /></button>
         </div>
       </div>
       <div className="sheet-body">
@@ -100,7 +100,7 @@ function GoalForm({ store, editId }) {
                   <input type="text" value={s.due} placeholder="срок — напр. «до июля» (необязательно)" onChange={e => setStage(i, 'due', e.target.value)} style={{ ...inp, fontSize: 13, padding: '8px 13px' }} />
                 </div>
                 {stages.length > 1 && (
-                  <button className="btn ghost sm" style={{ padding: 8, marginTop: 2 }} onClick={() => rmStage(i)}><Icon name="x" size={16} /></button>
+                  <button className="btn ghost sm" style={{ padding: 8, marginTop: 2 }} onClick={() => rmStage(i)} aria-label="Удалить этап"><Icon name="x" size={16} /></button>
                 )}
               </div>
             ))}
@@ -161,7 +161,7 @@ function HabitForm({ store, editId }) {
             </div>
             <h2 style={{ fontSize: 21 }}>{editId ? 'Изменить привычку' : 'Новая привычка'}</h2>
           </div>
-          <button className="btn ghost sm" onClick={store.closeForm}><Icon name="x" size={18} /></button>
+          <button className="btn ghost sm" onClick={store.closeForm} aria-label="Закрыть"><Icon name="x" size={18} /></button>
         </div>
       </div>
       <div className="sheet-body">
@@ -209,7 +209,7 @@ function HabitForm({ store, editId }) {
           </div>
           <div className="field">
             <label>Напоминание <span className="muted" style={{ fontWeight: 500 }}>(необязательно)</span></label>
-            <input type="text" value={time} placeholder="08:00" onChange={e => setTime(e.target.value)} />
+            <input type="time" value={time || ''} onChange={e => setTime(e.target.value)} />
           </div>
         </div>
 

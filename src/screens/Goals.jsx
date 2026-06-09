@@ -3,7 +3,7 @@
    ============================================================ */
 import { Icon } from '../components/Icon'
 import { Bar } from '../components/ui'
-import { goalProgress, currentStage, stageProgress } from '../lib/metrics'
+import { goalProgress, currentStage, stageProgress, isOverdue, plural } from '../lib/metrics'
 
 export function Goals({ store }) {
   const { goals, habits, openGoal, openForm } = store
@@ -26,6 +26,7 @@ export function Goals({ store }) {
           const p = goalProgress(g)
           const cur = currentStage(g)
           const linked = habits.filter(h => g.habits.includes(h.id))
+          const overdue = isOverdue(g, p.pct)
           return (
             <button key={g.id} className="card" onClick={() => openGoal(g.id)}
               style={{ padding: 'var(--pad)', textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -36,8 +37,9 @@ export function Goals({ store }) {
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <h3 style={{ fontSize: 18, lineHeight: 1.15 }}>{g.name}</h3>
-                  <div className="muted row" style={{ fontSize: 12.5, gap: 5, marginTop: 5 }}>
-                    <Icon name="calendar" size={13} /> {g.dueLabel}
+                  <div className={overdue ? 'row' : 'muted row'}
+                    style={{ fontSize: 12.5, gap: 5, marginTop: 5, ...(overdue ? { color: 'var(--miss-ink)', fontWeight: 700 } : {}) }}>
+                    <Icon name={overdue ? 'alert' : 'calendar'} size={13} /> {g.dueLabel}{overdue ? ' · просрочено' : ''}
                   </div>
                 </div>
                 <span className="stat-num" style={{ fontSize: 26, color: 'var(--goal)' }}>{p.pct}%</span>
@@ -63,7 +65,7 @@ export function Goals({ store }) {
                 </div>
                 {linked.length > 0 && (
                   <span className="chip habit" style={{ fontSize: 12 }}>
-                    <Icon name="link" size={12} /> {linked.length} {linked.length === 1 ? 'привычка' : 'привычки'}
+                    <Icon name="link" size={12} /> {linked.length} {plural(linked.length, ['привычка', 'привычки', 'привычек'])}
                   </span>
                 )}
               </div>

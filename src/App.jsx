@@ -11,18 +11,10 @@ import { GoalDetail } from './screens/GoalDetail'
 import { Matrix } from './screens/Matrix'
 import { Stats } from './screens/Stats'
 import { useData } from './store'
-import {
-  buildHeat, calcStreak, calcBest, calcRate, todayStr, formatDue,
-} from './lib/metrics'
+import { deriveHabit, todayStr, formatDue } from './lib/metrics'
 import * as api from './lib/api'
 
 const ROUTES = ['dashboard', 'matrix', 'habits', 'stats', 'goals']
-
-function recomputeHabit(h, doneSet) {
-  const heat = buildHeat(doneSet)
-  return { ...h, doneSet, heat, doneToday: doneSet.has(todayStr()),
-    streak: calcStreak(doneSet), best: calcBest(doneSet), rate: calcRate(heat) }
-}
 
 export default function App() {
   const { goals, setGoals, habits, setHabits, matrixTasks, setMatrixTasks, loading, error } = useData()
@@ -46,6 +38,26 @@ export default function App() {
     return () => mq.removeEventListener('change', h)
   }, [])
 
+  // keep the URL hash in sync with the route (deep links + back/forward)
+  useEffect(() => {
+    const want = route === 'goalDetail' && selectedGoal ? `goal:${selectedGoal}` : route
+    if (location.hash.slice(1) !== want) history.pushState(null, '', '#' + want)
+  }, [route, selectedGoal])
+  useEffect(() => {
+    const apply = () => {
+      const h = location.hash.slice(1)
+      if (h.startsWith('goal:')) { setSelectedGoal(h.slice(5)); setRouteState('goalDetail') }
+      else if (ROUTES.includes(h)) { setRouteState(h) }
+      else if (!h) setRouteState('dashboard')
+    }
+    window.addEventListener('hashchange', apply)
+    window.addEventListener('popstate', apply)
+    return () => {
+      window.removeEventListener('hashchange', apply)
+      window.removeEventListener('popstate', apply)
+    }
+  }, [])
+
   const scrollTop = () => document.querySelector('.main')?.scrollTo({ top: 0 })
   const setRoute = (k) => { setRouteState(k); scrollTop() }
 
@@ -61,14 +73,24 @@ export default function App() {
     openGoal(id) { setSelectedGoal(id); setRouteState('goalDetail'); scrollTop() },
 
     /* ---------- habits ---------- */
-    toggleHabit(id) {
+    // toggle a single day's log (heatmap click or today's checkbox)
+    toggleHabitDay(id, date) {
       const h = habits.find(x => x.id === id)
       if (!h) return
-      const on = !h.doneToday
-      const doneSet = new Set(h.doneSet)
-      if (on) doneSet.add(todayStr()); else doneSet.delete(todayStr())
-      setHabits(hs => hs.map(x => (x.id === id ? recomputeHabit(x, doneSet) : x)))
-      api.setHabitToday(id, on).then(r => { if (r?.error) console.error(r.error) }).catch(console.error)
+      const on = !h.doneSet.has(date)
+      const prevSet = h.doneSet
+      const doneSet = new Set(prevSet)
+      if (on) doneSet.add(date); else doneSet.delete(date)
+      setHabits(hs => hs.map(x => (x.id === id ? deriveHabit(x, doneSet) : x)))
+      // optimistic update: roll back this habit if the save fails
+      const revert = (e) => {
+        console.error(e)
+        setHabits(hs => hs.map(x => (x.id === id ? deriveHabit(x, prevSet) : x)))
+      }
+      api.setHabitDay(id, date, on).then(r => { if (r?.error) revert(r.error) }).catch(revert)
+    },
+    toggleHabit(id) {
+      store.toggleHabitDay(id, todayStr())
     },
 
     /* ---------- steps / stages ---------- */
@@ -78,12 +100,14 @@ export default function App() {
       const step = st?.steps.find(x => x.id === tid)
       if (!step) return
       const done = !step.done
-      updGoalLocal(gid, gg => {
+      const setDone = (v) => updGoalLocal(gid, gg => {
         gg.stages = gg.stages.map(s => (s.id !== sid ? s
-          : { ...s, steps: s.steps.map(x => (x.id === tid ? { ...x, done } : x)) }))
+          : { ...s, steps: s.steps.map(x => (x.id === tid ? { ...x, done: v } : x)) }))
         return gg
       })
-      api.setStepDone(tid, done).then(r => { if (r?.error) console.error(r.error) }).catch(console.error)
+      setDone(done)
+      const revert = (e) => { console.error(e); setDone(!done) }
+      api.setStepDone(tid, done).then(r => { if (r?.error) revert(r.error) }).catch(revert)
     },
 
     async addStep(gid, sid, name) {
@@ -160,7 +184,10 @@ export default function App() {
             const row = await api.insertStage(goalRow.id, list[i].name, list[i].due, i)
             built.push({ id: row.id, name: row.name, due: row.due, steps: [] })
           }
-          const ng = { id: goalRow.id, name, why, due, dueLabel, icon, note, stages: built, habits: [] }
+          const ng = {
+            id: goalRow.id, name, why, due, dueLabel, icon, note, stages: built, habits: [],
+            createdAt: goalRow.created_at ? goalRow.created_at.slice(0, 10) : todayStr(),
+          }
           setGoals(gs => [...gs, ng])
           setSelectedGoal(ng.id); setRouteState('goalDetail'); scrollTop()
         } catch (e) { console.error(e) }
@@ -201,7 +228,9 @@ export default function App() {
         try {
           await api.updateHabit(editId, { name, icon, freq, freqType, time, kind })
           await api.setHabitGoals(editId, gl)
-          setHabits(hs => hs.map(h => (h.id === editId ? { ...h, name, icon, freq, freqType, time, kind, goals: gl } : h)))
+          // re-derive: streak/rate depend on freqType
+          setHabits(hs => hs.map(h => (h.id === editId
+            ? deriveHabit({ ...h, name, icon, freq, freqType, time, kind, goals: gl }, h.doneSet) : h)))
           // keep goal.habits in sync
           setGoals(gs => gs.map(g => ({
             ...g,
@@ -214,8 +243,9 @@ export default function App() {
         try {
           const row = await api.insertHabit({ name, icon, freq, freqType, time, kind }, habits.length)
           await api.setHabitGoals(row.id, gl)
-          const nh = recomputeHabit({
+          const nh = deriveHabit({
             id: row.id, name, icon, color: 'habit', freq, freqType, time, kind, goals: gl,
+            createdAt: row.created_at ? row.created_at.slice(0, 10) : todayStr(),
           }, new Set())
           setHabits(hs => [...hs, nh])
           setGoals(gs => gs.map(g => (gl.includes(g.id)
